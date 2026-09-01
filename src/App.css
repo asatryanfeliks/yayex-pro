@@ -288,4 +288,16 @@ main {
   text-align: center;
   color: #666;
   font-size: 14px;
+}.error-msg {
+  color: #ef4444;
+  font-weight: 600;
+  margin-bottom: 16px;
+  font-size: 14px;
+}
+
+.success-msg {
+  color: #10b981;
+  font-weight: 600;
+  margin-bottom: 16px;
+  font-size: 14px;
 }
