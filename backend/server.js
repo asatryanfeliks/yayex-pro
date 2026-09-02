@@ -419,7 +419,136 @@ app.get('/api/challenge-status', verifyToken, async (req, res) => {
     res.status(500).json({ error: 'Server error' })
   }
 })
+// Admin middleware - проверка если пользователь admin
+const isAdmin = (req, res, next) => {
+  // Для простоты: первый пользователь или по ID
+  const adminIds = ['add-your-admin-id-here']
+  if (adminIds.includes(req.user.id) || req.user.email === 'admin@yayex.pro') {
+    next()
+  } else {
+    res.status(403).json({ error: 'Admin access required' })
+  }
+}
 
+// Get all users
+app.get('/api/admin/users', verifyToken, isAdmin, async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('id, email, created_at')
+      .order('created_at', { ascending: false })
+
+    if (error) throw error
+    res.json({ users: data })
+  } catch (error) {
+    console.error('Error:', error)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+// Get all user challenges
+app.get('/api/admin/user-challenges', verifyToken, isAdmin, async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('user_challenges')
+      .select(`
+        *,
+        user:users(email),
+        challenge:challenges(name)
+      `)
+      .order('created_at', { ascending: false })
+
+    if (error) throw error
+    res.json({ userChallenges: data })
+  } catch (error) {
+    console.error('Error:', error)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+// Get statistics
+app.get('/api/admin/stats', verifyToken, isAdmin, async (req, res) => {
+  try {
+    // Total users
+    const { count: usersCount } = await supabase
+      .from('users')
+      .select('*', { count: 'exact', head: true })
+
+    // Active challenges
+    const { count: activeChallenges } = await supabase
+      .from('user_challenges')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'active')
+
+    // Passed challenges
+    const { count: passedChallenges } = await supabase
+      .from('user_challenges')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'passed')
+
+    // Failed challenges
+    const { count: failedChallenges } = await supabase
+      .from('user_challenges')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'failed')
+
+    res.json({
+      stats: {
+        totalUsers: usersCount || 0,
+        activeChallenges: activeChallenges || 0,
+        passedChallenges: passedChallenges || 0,
+        failedChallenges: failedChallenges || 0
+      }
+    })
+  } catch (error) {
+    console.error('Error:', error)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+// Update challenge
+app.put('/api/admin/challenges/:id', verifyToken, isAdmin, async (req, res) => {
+  try {
+    const { id } = req.params
+    const { name, price, max_drawdown, profit_target, duration_days } = req.body
+
+    const { data, error } = await supabase
+      .from('challenges')
+      .update({
+        name,
+        price,
+        max_drawdown,
+        profit_target,
+        duration_days
+      })
+      .eq('id', id)
+      .select()
+
+    if (error) throw error
+    res.json({ challenge: data })
+  } catch (error) {
+    console.error('Error:', error)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+// Delete user challenge
+app.delete('/api/admin/user-challenges/:id', verifyToken, isAdmin, async (req, res) => {
+  try {
+    const { id } = req.params
+
+    const { error } = await supabase
+      .from('user_challenges')
+      .delete()
+      .eq('id', id)
+
+    if (error) throw error
+    res.json({ success: true })
+  } catch (error) {
+    console.error('Error:', error)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
 const PORT = process.env.PORT || 3001
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`)
