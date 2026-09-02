@@ -5,9 +5,8 @@ import Home from './pages/Home'
 import Dashboard from './pages/Dashboard'
 import Login from './pages/Login'
 import Signup from './pages/Signup'
-
-type Page = 'home' | 'dashboard' | 'login' | 'signup'
-
+import Trading from './pages/Trading'
+type Page = 'home' | 'dashboard' | 'login' | 'signup' | 'trading'
 export default function App() {
   const [currentPage, setCurrentPage] = useState<Page>('home')
   const [token, setToken] = useState<string | null>(null)
@@ -65,6 +64,7 @@ export default function App() {
       {currentPage === 'login' && !token && <Login onLogin={handleLogin} />}
       {currentPage === 'signup' && !token && <Signup onSignup={handleSignup} />}
       {currentPage === 'dashboard' && token && <Dashboard />}
+      {currentPage === 'trading' && token && <Trading />}
     </div>
   )
 }

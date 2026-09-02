@@ -137,7 +137,71 @@ if (!passwordMatch) {
     res.status(500).json({ error: 'Server error' })
   }
 })
+// Middleware to verify JWT
+const verifyToken = (req, res, next) => {
+  const token = req.headers.authorization?.split(' ')[1]
+  if (!token) {
+    return res.status(401).json({ error: 'No token provided' })
+  }
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET)
+    req.user = decoded
+    next()
+  } catch (error) {
+    res.status(401).json({ error: 'Invalid token' })
+  }
+}
 
+// Create order endpoint
+app.post('/api/orders', verifyToken, async (req, res) => {
+  try {
+    const { symbol, side, entry_price, size } = req.body
+    const user_id = req.user.email // или можно использовать user ID
+
+    if (!symbol || !side || !entry_price || !size) {
+      return res.status(400).json({ error: 'Missing required fields' })
+    }
+
+    const { data, error } = await supabase
+      .from('orders')
+      .insert([{
+        symbol,
+        side,
+        entry_price,
+        size,
+        current_price: entry_price,
+        pnl: 0,
+        status: 'open',
+        user_id
+      }])
+
+    if (error) throw error
+
+    res.json({ success: true, order: data })
+  } catch (error) {
+    console.error('Error:', error)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+// Get user orders endpoint
+app.get('/api/orders', verifyToken, async (req, res) => {
+  try {
+    const user_email = req.user.email
+
+    const { data, error } = await supabase
+      .from('orders')
+      .select('*')
+      .eq('user_id', user_email)
+
+    if (error) throw error
+
+    res.json({ orders: data })
+  } catch (error) {
+    console.error('Error:', error)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
 const PORT = process.env.PORT || 3001
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`)

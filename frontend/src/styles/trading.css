@@ -1,0 +1,134 @@
+.trading-container {
+  min-height: 100vh;
+  background: #0a0a0a;
+  padding: 40px 60px;
+}
+
+.trading-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 40px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.trading-form {
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  padding: 32px;
+  border-radius: 12px;
+}
+
+.trading-form h2 {
+  color: #ffffff;
+  font-size: 24px;
+  margin-bottom: 24px;
+}
+
+.trading-form form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.trading-form input,
+.trading-form select {
+  padding: 12px;
+  background: #0f0f0f;
+  border: 1px solid #2a2a2a;
+  color: #ffffff;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.trading-form input:focus,
+.trading-form select:focus {
+  outline: none;
+  border-color: #d4af37;
+}
+
+.trading-form button {
+  padding: 12px;
+  background: #d4af37;
+  color: #0a0a0a;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.trading-form button:hover:not(:disabled) {
+  background: #c9a227;
+}
+
+.trading-form button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.trading-form .error {
+  color: #ef4444;
+  font-size: 14px;
+}
+
+.trading-positions {
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  padding: 32px;
+  border-radius: 12px;
+}
+
+.trading-positions h2 {
+  color: #ffffff;
+  font-size: 24px;
+  margin-bottom: 24px;
+}
+
+.trading-positions .empty {
+  color: #999;
+  text-align: center;
+  padding: 40px;
+}
+
+.orders-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.orders-table th {
+  background: #0f0f0f;
+  padding: 12px;
+  text-align: left;
+  color: #d4af37;
+  font-weight: 600;
+  border-bottom: 1px solid #2a2a2a;
+}
+
+.orders-table td {
+  padding: 12px;
+  border-bottom: 1px solid #2a2a2a;
+  color: #ffffff;
+}
+
+.orders-table tr.buy td:nth-child(2) {
+  color: #10b981;
+}
+
+.orders-table tr.sell td:nth-child(2) {
+  color: #ef4444;
+}
+
+.orders-table .positive {
+  color: #10b981;
+}
+
+.orders-table .negative {
+  color: #ef4444;
+}
+
+@media (max-width: 1024px) {
+  .trading-layout {
+    grid-template-columns: 1fr;
+  }
+}
