@@ -17,7 +17,7 @@ const supabase = createClient(
   process.env.SUPABASE_KEY
 )
 
-const JWT_SECRET = 'your-secret-key-change-in-production'
+const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-key'
 
 // Health check
 app.get('/api/health', (req, res) => {
