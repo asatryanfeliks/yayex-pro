@@ -18,6 +18,11 @@ interface Prices {
   [key: string]: number
 }
 
+interface ChartDataPoint {
+  time: string
+  price: number
+}
+
 export default function Trading() {
   const [symbol, setSymbol] = useState('BTC/USDT')
   const [side, setSide] = useState('buy')
@@ -25,7 +30,7 @@ export default function Trading() {
   const [size, setSize] = useState('')
   const [orders, setOrders] = useState<Order[]>([])
   const [prices, setPrices] = useState<Prices>({})
-  const [chartData, setChartData] = useState<any[]>([])
+  const [chartData, setChartData] = useState<ChartDataPoint[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -172,10 +177,10 @@ export default function Trading() {
               <LineChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" />
                 <XAxis dataKey="time" stroke="#999" />
-                <YAxis stroke="#999" domain="dataMin - 100" />
+                <YAxis stroke="#999" domain={['dataMin - 100', 'dataMax + 100']} />
                 <Tooltip 
                   contentStyle={{ background: '#1a1a1a', border: '1px solid #2a2a2a' }}
-                  formatter={(value: number) => `$${value.toFixed(2)}`}
+                  formatter={(value: any) => value ? `$${Number(value).toFixed(2)}` : '$0.00'}
                 />
                 <Line 
                   type="monotone" 
