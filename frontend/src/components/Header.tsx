@@ -1,6 +1,6 @@
 interface Props {
-  currentPage: 'home' | 'dashboard' | 'login' | 'signup' | 'trading'
-  setCurrentPage: (page: 'home' | 'dashboard' | 'login' | 'signup' | 'trading') => void
+  currentPage: 'home' | 'dashboard' | 'login' | 'signup' | 'trading' | 'challenges'
+  setCurrentPage: (page: 'home' | 'dashboard' | 'login' | 'signup' | 'trading' | 'challenges') => void
   onLogout: () => void
 }
 
@@ -22,6 +22,12 @@ export default function Header({ setCurrentPage, onLogout }: Props) {
           onClick={() => setCurrentPage('trading')}
         >
           Trading
+        </button>
+        <button 
+          className="btn-dashboard"
+          onClick={() => setCurrentPage('challenges')}
+        >
+          Challenges
         </button>
         <button 
           className="btn-logout"
