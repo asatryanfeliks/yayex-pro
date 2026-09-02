@@ -154,7 +154,72 @@ app.get('/api/orders', verifyToken, async (req, res) => {
     res.status(500).json({ error: 'Server error' })
   }
 })
+// Get all challenges
+app.get('/api/challenges', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('challenges')
+      .select('*')
+    if (error) throw error
+    res.json({ challenges: data })
+  } catch (error) {
+    console.error('Error:', error)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
 
+// Enroll in challenge
+app.post('/api/user-challenges', verifyToken, async (req, res) => {
+  try {
+    const { challenge_id } = req.body
+    const user_id = req.user.id
+
+    if (!challenge_id) {
+      return res.status(400).json({ error: 'Challenge ID required' })
+    }
+
+    const { data, error } = await supabase
+      .from('user_challenges')
+      .insert([{
+        user_id,
+        challenge_id,
+        status: 'active',
+        balance: 10000,
+        max_balance: 10000
+      }])
+      .select()
+
+    if (error) throw error
+    res.json({ success: true, userChallenge: data })
+  } catch (error) {
+    console.error('Error:', error)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+// Get user's active challenge
+app.get('/api/user-challenges', verifyToken, async (req, res) => {
+  try {
+    const user_id = req.user.id
+
+    const { data, error } = await supabase
+      .from('user_challenges')
+      .select(`
+        *,
+        challenge:challenges(*)
+      `)
+      .eq('user_id', user_id)
+      .eq('status', 'active')
+      .single()
+
+    if (error && error.code !== 'PGRST116') throw error
+
+    res.json({ userChallenge: data || null })
+  } catch (error) {
+    console.error('Error:', error)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
 const PORT = process.env.PORT || 3001
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`)

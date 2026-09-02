@@ -1,0 +1,139 @@
+.challenges-container {
+  min-height: 100vh;
+  background: #0a0a0a;
+  padding: 40px 60px;
+}
+
+.active-challenge {
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  padding: 40px;
+  border-radius: 12px;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.active-challenge h2 {
+  color: #d4af37;
+  font-size: 28px;
+  margin-bottom: 32px;
+}
+
+.challenge-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+}
+
+.stat {
+  background: #0f0f0f;
+  padding: 20px;
+  border-radius: 8px;
+  border: 1px solid #2a2a2a;
+}
+
+.stat label {
+  color: #999;
+  font-size: 12px;
+  text-transform: uppercase;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.stat .value {
+  color: #d4af37;
+  font-size: 24px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.challenges-grid {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.challenges-grid h2 {
+  color: #ffffff;
+  font-size: 32px;
+  margin-bottom: 40px;
+  text-align: center;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 32px;
+}
+
+.challenge-card {
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  padding: 32px;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  transition: all 0.3s;
+}
+
+.challenge-card:hover {
+  border-color: #d4af37;
+  transform: translateY(-4px);
+}
+
+.challenge-card h3 {
+  color: #ffffff;
+  font-size: 24px;
+  margin-bottom: 16px;
+}
+
+.challenge-card .price {
+  color: #d4af37;
+  font-size: 28px;
+  font-weight: 600;
+  margin-bottom: 24px;
+}
+
+.challenge-card .details {
+  flex: 1;
+  margin-bottom: 24px;
+}
+
+.challenge-card .details p {
+  color: #ccc;
+  margin: 12px 0;
+  font-size: 14px;
+}
+
+.challenge-card .details strong {
+  color: #d4af37;
+}
+
+.btn-enroll {
+  padding: 12px;
+  background: #d4af37;
+  color: #0a0a0a;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.btn-enroll:hover {
+  background: #c9a227;
+}
+
+.challenges-container .error {
+  color: #ef4444;
+  text-align: center;
+  margin-top: 20px;
+}
+
+@media (max-width: 1024px) {
+  .cards {
+    grid-template-columns: 1fr;
+  }
+  .challenge-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

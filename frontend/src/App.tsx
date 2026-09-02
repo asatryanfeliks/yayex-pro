@@ -6,7 +6,8 @@ import Dashboard from './pages/Dashboard'
 import Login from './pages/Login'
 import Signup from './pages/Signup'
 import Trading from './pages/Trading'
-type Page = 'home' | 'dashboard' | 'login' | 'signup' | 'trading'
+import Challenges from './pages/Challenges'
+type Page = 'home' | 'dashboard' | 'login' | 'signup' | 'trading' | 'challenges'
 export default function App() {
   const [currentPage, setCurrentPage] = useState<Page>('home')
   const [token, setToken] = useState<string | null>(null)
@@ -65,6 +66,7 @@ export default function App() {
       {currentPage === 'signup' && !token && <Signup onSignup={handleSignup} />}
       {currentPage === 'dashboard' && token && <Dashboard />}
       {currentPage === 'trading' && token && <Trading />}
+      {currentPage === 'challenges' && token && <Challenges />}
     </div>
   )
 }
