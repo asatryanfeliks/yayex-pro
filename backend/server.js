@@ -423,7 +423,7 @@ app.get('/api/challenge-status', verifyToken, async (req, res) => {
 const isAdmin = (req, res, next) => {
   // Для простоты: первый пользователь или по ID
   const adminIds = ['add-your-admin-id-here']
-  if (adminIds.includes(req.user.id) || req.user.email === 'admin@yayex.pro') {
+  if (adminIds.includes(req.user.id) || req.user.email === 'felix@gmail.com') {
     next()
   } else {
     res.status(403).json({ error: 'Admin access required' })
