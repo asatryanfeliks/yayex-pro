@@ -59,7 +59,117 @@ setInterval(async () => {
   for (const symbol of Object.keys(priceCache)) {
     await fetchBybitPrice(symbol)
   }
-}, 10000)
+}, 5000)
+
+// Calculate P&L for user challenge
+const calculateUserChallengePnL = async (user_id, challenge_id) => {
+  try {
+    // Get all user's open orders
+    const { data: orders, error: ordersError } = await supabase
+      .from('orders')
+      .select('*')
+      .eq('user_id', user_id)
+      .eq('status', 'open')
+
+    if (ordersError) throw ordersError
+
+    // Calculate total P&L
+    let totalPnL = 0
+    let maxDrawdown = 0
+
+    for (let order of orders) {
+      const currentPrice = await fetchBybitPrice(order.symbol)
+      order.current_price = currentPrice
+
+      if (order.side === 'buy') {
+        order.pnl = (currentPrice - order.entry_price) * order.size
+      } else {
+        order.pnl = (order.entry_price - currentPrice) * order.size
+      }
+
+      totalPnL += order.pnl
+    }
+
+    // Get challenge info
+    const { data: challenge, error: challengeError } = await supabase
+      .from('challenges')
+      .select('*')
+      .eq('id', challenge_id)
+      .single()
+
+    if (challengeError) throw challengeError
+
+    // Get user challenge
+    const { data: userChallenge, error: userChallengeError } = await supabase
+      .from('user_challenges')
+      .select('*')
+      .eq('user_id', user_id)
+      .eq('challenge_id', challenge_id)
+      .eq('status', 'active')
+      .single()
+
+    if (userChallengeError && userChallengeError.code !== 'PGRST116') throw userChallengeError
+
+    if (!userChallenge) {
+      return { pnl: totalPnL, status: 'no_challenge' }
+    }
+
+    // Calculate current balance
+    const currentBalance = userChallenge.balance + totalPnL
+    const initialBalance = 10000
+
+    // Calculate drawdown percentage
+    const drawdown = ((initialBalance - currentBalance) / initialBalance) * 100
+
+    // Check if challenge failed or passed
+    let newStatus = userChallenge.status
+    let shouldUpdate = false
+
+    if (drawdown > challenge.max_drawdown) {
+      newStatus = 'failed'
+      shouldUpdate = true
+    } else if (totalPnL >= challenge.profit_target) {
+      newStatus = 'passed'
+      shouldUpdate = true
+    }
+
+    // Update challenge status if needed
+    if (shouldUpdate) {
+      await supabase
+        .from('user_challenges')
+        .update({
+          status: newStatus,
+          balance: currentBalance,
+          max_balance: Math.max(userChallenge.max_balance, currentBalance),
+          ended_at: new Date().toISOString()
+        })
+        .eq('id', userChallenge.id)
+    } else {
+      // Update balance tracking
+      await supabase
+        .from('user_challenges')
+        .update({
+          balance: currentBalance,
+          max_balance: Math.max(userChallenge.max_balance, currentBalance)
+        })
+        .eq('id', userChallenge.id)
+    }
+
+    return {
+      pnl: totalPnL,
+      balance: currentBalance,
+      drawdown: drawdown,
+      status: newStatus,
+      profitTarget: challenge.profit_target,
+      maxDrawdown: challenge.max_drawdown,
+      passed: newStatus === 'passed',
+      failed: newStatus === 'failed'
+    }
+  } catch (error) {
+    console.error('Error calculating P&L:', error)
+    throw error
+  }
+}
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'Server is running' })
@@ -156,7 +266,6 @@ app.post('/api/login', async (req, res) => {
   }
 })
 
-// Get current prices
 app.get('/api/prices', async (req, res) => {
   try {
     const symbols = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT']
@@ -246,9 +355,11 @@ app.post('/api/user-challenges', verifyToken, async (req, res) => {
   try {
     const { challenge_id } = req.body
     const user_id = req.user.id
+
     if (!challenge_id) {
       return res.status(400).json({ error: 'Challenge ID required' })
     }
+
     const { data, error } = await supabase
       .from('user_challenges')
       .insert([{
@@ -259,6 +370,7 @@ app.post('/api/user-challenges', verifyToken, async (req, res) => {
         max_balance: 10000
       }])
       .select()
+
     if (error) throw error
     res.json({ success: true, userChallenge: data })
   } catch (error) {
@@ -270,6 +382,7 @@ app.post('/api/user-challenges', verifyToken, async (req, res) => {
 app.get('/api/user-challenges', verifyToken, async (req, res) => {
   try {
     const user_id = req.user.id
+
     const { data, error } = await supabase
       .from('user_challenges')
       .select(`
@@ -279,8 +392,28 @@ app.get('/api/user-challenges', verifyToken, async (req, res) => {
       .eq('user_id', user_id)
       .eq('status', 'active')
       .single()
+
     if (error && error.code !== 'PGRST116') throw error
+
     res.json({ userChallenge: data || null })
+  } catch (error) {
+    console.error('Error:', error)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+// Get challenge P&L status
+app.get('/api/challenge-status', verifyToken, async (req, res) => {
+  try {
+    const user_id = req.user.id
+    const { challenge_id } = req.query
+
+    if (!challenge_id) {
+      return res.status(400).json({ error: 'Challenge ID required' })
+    }
+
+    const pnlData = await calculateUserChallengePnL(user_id, challenge_id)
+    res.json(pnlData)
   } catch (error) {
     console.error('Error:', error)
     res.status(500).json({ error: 'Server error' })

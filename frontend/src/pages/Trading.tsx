@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import '../styles/trading.css'
-
+import ChallengeStatus from './ChallengeStatus'
 interface Order {
   id: string
   symbol: string
@@ -120,6 +120,7 @@ export default function Trading() {
 
   return (
     <div className="trading-container">
+        {token && <ChallengeStatus />}
       <div className="trading-layout">
         <div className="trading-panel">
           <div className="price-ticker">
