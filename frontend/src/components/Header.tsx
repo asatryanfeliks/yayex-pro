@@ -1,33 +1,27 @@
 interface Props {
-  currentPage: 'home' | 'dashboard'
-  setCurrentPage: (page: 'home' | 'dashboard') => void
+  currentPage: 'home' | 'dashboard' | 'login' | 'signup'
+  setCurrentPage: (page: 'home' | 'dashboard' | 'login' | 'signup') => void
+  onLogout: () => void
 }
 
-export default function Header({ currentPage, setCurrentPage }: Props) {
+export default function Header({ currentPage, setCurrentPage, onLogout }: Props) {
   return (
     <header className="header">
       <div className="logo" onClick={() => setCurrentPage('home')} style={{ cursor: 'pointer' }}>
         YAYEX
       </div>
       <nav>
-        <a 
-          href="#features"
-          onClick={(e) => {
-            if (currentPage !== 'home') {
-              e.preventDefault()
-              setCurrentPage('home')
-            }
-          }}
-        >
-          Features
-        </a>
-        <a href="#compare">Compare</a>
-        <a href="#faq">FAQ</a>
         <button 
           className="btn-dashboard"
           onClick={() => setCurrentPage('dashboard')}
         >
           Dashboard
+        </button>
+        <button 
+          className="btn-logout"
+          onClick={onLogout}
+        >
+          Logout
         </button>
       </nav>
     </header>

@@ -301,3 +301,47 @@ main {
   margin-bottom: 16px;
   font-size: 14px;
 }
+.btn-logout {
+  padding: 8px 16px;
+  background: transparent;
+  border: 1px solid #ef4444;
+  color: #ef4444;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.btn-logout:hover {
+  background: #ef4444;
+  color: #ffffff;
+}.btn-login {
+  padding: 8px 16px;
+  background: transparent;
+  border: 1px solid #d4af37;
+  color: #d4af37;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.3s;
+}
+
+.btn-login:hover {
+  background: #d4af37;
+  color: #0a0a0a;
+}
+
+.btn-signup {
+  padding: 8px 16px;
+  background: #d4af37;
+  color: #0a0a0a;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.3s;
+}
+
+.btn-signup:hover {
+  background: #c9a227;
+}
