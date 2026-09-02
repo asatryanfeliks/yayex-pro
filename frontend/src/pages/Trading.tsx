@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import '../styles/trading.css'
 
 interface Order {
@@ -175,7 +175,7 @@ export default function Trading() {
                 <YAxis stroke="#999" domain="dataMin - 100" />
                 <Tooltip 
                   contentStyle={{ background: '#1a1a1a', border: '1px solid #2a2a2a' }}
-                  formatter={(value) => `$${value.toFixed(2)}`}
+                  formatter={(value: number) => `$${value.toFixed(2)}`}
                 />
                 <Line 
                   type="monotone" 
