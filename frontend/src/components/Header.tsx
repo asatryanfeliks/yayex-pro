@@ -4,7 +4,7 @@ interface Props {
   onLogout: () => void
 }
 
-export default function Header({ currentPage, setCurrentPage, onLogout }: Props) {
+export default function Header({ setCurrentPage, onLogout }: Props) {
   return (
     <header className="header">
       <div className="logo" onClick={() => setCurrentPage('home')} style={{ cursor: 'pointer' }}>
