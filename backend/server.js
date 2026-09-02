@@ -114,11 +114,15 @@ app.post('/api/login', async (req, res) => {
     }
 
     // Compare password
-    const passwordMatch = await bcrypt.compare(password, data.password)
+console.log('Stored password hash:', data.password)
+console.log('Entered password:', password)
 
-    if (!passwordMatch) {
-      return res.status(401).json({ error: 'Invalid credentials' })
-    }
+const passwordMatch = await bcrypt.compare(password, data.password)
+console.log('Password match result:', passwordMatch)
+
+if (!passwordMatch) {
+  return res.status(401).json({ error: 'Invalid credentials' })
+}
 
     // Create JWT token
     const token = jwt.sign({ email }, JWT_SECRET, { expiresIn: '24h' })
