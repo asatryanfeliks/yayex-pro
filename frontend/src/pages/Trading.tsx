@@ -102,7 +102,6 @@ export default function Trading() {
 
   const fetchChallengeData = async () => {
     try {
-      // Get active challenge
       const challengeRes = await fetch(`${apiUrl}/api/user-challenges`, {
         headers: { 'Authorization': `Bearer ${token}` }
       })
@@ -116,7 +115,6 @@ export default function Trading() {
 
       setUserChallenge(challengeData.userChallenge)
 
-      // Get P&L status
       const pnlRes = await fetch(
         `${apiUrl}/api/challenge-status?challenge_id=${challengeData.userChallenge.challenge_id}`,
         { headers: { 'Authorization': `Bearer ${token}` } }
@@ -148,7 +146,6 @@ export default function Trading() {
         })
       })
 
-}
       const data = await response.json()
 
       if (!response.ok) {
@@ -166,24 +163,25 @@ export default function Trading() {
       setLoading(false)
     }
   }
-const handleCloseOrder = async (orderId: string) => {
-  try {
-    const response = await fetch(`${apiUrl}/api/orders/${orderId}/close`, {
-      method: 'PUT',
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
-    if (response.ok) {
-      fetchOrders()
+
+  const handleCloseOrder = async (orderId: string) => {
+    try {
+      const response = await fetch(`${apiUrl}/api/orders/${orderId}/close`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      if (response.ok) {
+        fetchOrders()
+      }
+    } catch (err) {
+      console.error('Error:', err)
     }
-  } catch (err) {
-    console.error('Error:', err)
   }
-}
+
   const profitProgress = pnlData ? (pnlData.pnl / pnlData.profitTarget) * 100 : 0
-  
+
   return (
     <div className="trading-container">
-      {/* Challenge Status */}
       {userChallenge && pnlData && (
         <div className={`challenge-status-header ${pnlData.status}`}>
           <div className="challenge-header-left">
@@ -223,7 +221,6 @@ const handleCloseOrder = async (orderId: string) => {
         </div>
       )}
 
-      {/* Trading Interface */}
       <div className="trading-layout">
         <div className="trading-panel">
           <div className="price-ticker">
