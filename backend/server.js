@@ -4,6 +4,7 @@ require('dotenv').config()
 const { createClient } = require('@supabase/supabase-js')
 const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
+const nodemailer = require('nodemailer')
 
 const app = express()
 
@@ -16,6 +17,47 @@ const supabase = createClient(
 )
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-key'
+
+// Email configuration
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USER || 'your-email@gmail.com',
+    pass: process.env.EMAIL_PASSWORD || 'your-app-password'
+  }
+})
+
+// Send challenge notification
+const sendChallengeNotification = async (email, challengeName, status, pnl) => {
+  try {
+    const subject = status === 'passed' 
+      ? `🎉 Congratulations! ${challengeName} Challenge Passed!`
+      : `Challenge Failed: ${challengeName}`
+
+    const htmlContent = status === 'passed'
+      ? `
+        <h2>Congratulations!</h2>
+        <p>You successfully completed the <strong>${challengeName}</strong> challenge!</p>
+        <p>Final P&L: <strong style="color: green;">$${pnl.toFixed(2)}</strong></p>
+        <p>Great job! Ready for the next challenge?</p>
+      `
+      : `
+        <h2>Challenge Failed</h2>
+        <p>Unfortunately, your <strong>${challengeName}</strong> challenge ended.</p>
+        <p>Final P&L: <strong style="color: red;">$${pnl.toFixed(2)}</strong></p>
+        <p>Try again and improve your trading skills!</p>
+      `
+
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER || 'noreply@yayex.pro',
+      to: email,
+      subject,
+      html: htmlContent
+    })
+  } catch (error) {
+    console.error('Error sending email:', error)
+  }
+}
 
 // Price simulation data
 let priceData = {
@@ -45,24 +87,14 @@ const symbolMap = {
   'BNB/USDT': 'BNBUSDT'
 }
 
-const reverseSymbolMap = {
-  'BTCUSDT': 'BTC/USDT',
-  'ETHUSDT': 'ETH/USDT',
-  'BNBUSDT': 'BNB/USDT'
-}
-
-// Simulate price movement every 5 seconds
+// Simulate price movement
 setInterval(() => {
   Object.keys(priceData).forEach(symbol => {
     const data = priceData[symbol]
-    
-    // Random movement ±0.5%
     const changePercent = (Math.random() - 0.5) * 0.01
     const newPrice = data.current * (1 + changePercent)
-    
     data.current = parseFloat(newPrice.toFixed(2))
     
-    // Generate candlestick every minute
     const currentCandleTime = Math.floor(Date.now() / 60000)
     
     if (currentCandleTime !== data.lastCandleTime) {
@@ -105,7 +137,6 @@ Object.keys(priceData).forEach(symbol => {
     })
   }
 })
-
 app.get('/api/health', (req, res) => {
   res.json({ status: 'Server is running' })
 })
@@ -219,11 +250,9 @@ app.get('/api/candlesticks/:symbol', (req, res) => {
   try {
     const { symbol } = req.params
     const binanceSymbol = symbolMap[symbol]
-
     if (!binanceSymbol) {
       return res.status(400).json({ error: 'Invalid symbol' })
     }
-
     const candlesticks = priceData[binanceSymbol].candlesticks
     res.json({ candlesticks })
   } catch (error) {
@@ -268,20 +297,56 @@ app.get('/api/orders', verifyToken, async (req, res) => {
       .select('*')
       .eq('user_id', user_id)
     if (error) throw error
-
     for (let order of data) {
       const binanceSymbol = symbolMap[order.symbol]
       const currentPrice = priceData[binanceSymbol].current
       order.current_price = currentPrice
-
       if (order.side === 'buy') {
         order.pnl = (currentPrice - order.entry_price) * order.size
       } else {
         order.pnl = (order.entry_price - currentPrice) * order.size
       }
     }
-
     res.json({ orders: data })
+  } catch (error) {
+    console.error('Error:', error)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+app.put('/api/orders/:id/close', verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params
+    const user_id = req.user.id
+    const { data: order, error: fetchError } = await supabase
+      .from('orders')
+      .select('*')
+      .eq('id', id)
+      .eq('user_id', user_id)
+      .single()
+    if (fetchError || !order) {
+      return res.status(404).json({ error: 'Order not found' })
+    }
+    const binanceSymbol = symbolMap[order.symbol]
+    const closePrice = priceData[binanceSymbol].current
+    let finalPnL = 0
+    if (order.side === 'buy') {
+      finalPnL = (closePrice - order.entry_price) * order.size
+    } else {
+      finalPnL = (order.entry_price - closePrice) * order.size
+    }
+    const { data, error } = await supabase
+      .from('orders')
+      .update({
+        status: 'closed',
+        current_price: closePrice,
+        pnl: finalPnL,
+        closed_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select()
+    if (error) throw error
+    res.json({ success: true, order: data[0] })
   } catch (error) {
     console.error('Error:', error)
     res.status(500).json({ error: 'Server error' })
@@ -305,11 +370,9 @@ app.post('/api/user-challenges', verifyToken, async (req, res) => {
   try {
     const { challenge_id } = req.body
     const user_id = req.user.id
-
     if (!challenge_id) {
       return res.status(400).json({ error: 'Challenge ID required' })
     }
-
     const { data, error } = await supabase
       .from('user_challenges')
       .insert([{
@@ -320,7 +383,6 @@ app.post('/api/user-challenges', verifyToken, async (req, res) => {
         max_balance: 10000
       }])
       .select()
-
     if (error) throw error
     res.json({ success: true, userChallenge: data })
   } catch (error) {
@@ -332,7 +394,6 @@ app.post('/api/user-challenges', verifyToken, async (req, res) => {
 app.get('/api/user-challenges', verifyToken, async (req, res) => {
   try {
     const user_id = req.user.id
-
     const { data, error } = await supabase
       .from('user_challenges')
       .select(`
@@ -342,9 +403,7 @@ app.get('/api/user-challenges', verifyToken, async (req, res) => {
       .eq('user_id', user_id)
       .eq('status', 'active')
       .single()
-
     if (error && error.code !== 'PGRST116') throw error
-
     res.json({ userChallenge: data || null })
   } catch (error) {
     console.error('Error:', error)
@@ -352,7 +411,7 @@ app.get('/api/user-challenges', verifyToken, async (req, res) => {
   }
 })
 
-const calculateUserChallengePnL = async (user_id, challenge_id) => {
+const calculateUserChallengePnL = async (user_id, challenge_id, user_email) => {
   try {
     const { data: orders } = await supabase
       .from('orders')
@@ -398,6 +457,7 @@ const calculateUserChallengePnL = async (user_id, challenge_id) => {
     const drawdown = ((initialBalance - currentBalance) / initialBalance) * 100
 
     let newStatus = userChallenge.status
+    let shouldUpdate = false
 
     if (drawdown > challenge.max_drawdown) {
       newStatus = 'failed'
@@ -409,6 +469,8 @@ const calculateUserChallengePnL = async (user_id, challenge_id) => {
           ended_at: new Date().toISOString()
         })
         .eq('id', userChallenge.id)
+      
+      await sendChallengeNotification(user_email, challenge.name, 'failed', totalPnL)
     } else if (totalPnL >= challenge.profit_target) {
       newStatus = 'passed'
       await supabase
@@ -419,6 +481,8 @@ const calculateUserChallengePnL = async (user_id, challenge_id) => {
           ended_at: new Date().toISOString()
         })
         .eq('id', userChallenge.id)
+      
+      await sendChallengeNotification(user_email, challenge.name, 'passed', totalPnL)
     } else {
       await supabase
         .from('user_challenges')
@@ -448,13 +512,14 @@ const calculateUserChallengePnL = async (user_id, challenge_id) => {
 app.get('/api/challenge-status', verifyToken, async (req, res) => {
   try {
     const user_id = req.user.id
+    const user_email = req.user.email
     const { challenge_id } = req.query
 
     if (!challenge_id) {
       return res.status(400).json({ error: 'Challenge ID required' })
     }
 
-    const pnlData = await calculateUserChallengePnL(user_id, challenge_id)
+    const pnlData = await calculateUserChallengePnL(user_id, challenge_id, user_email)
     res.json(pnlData)
   } catch (error) {
     console.error('Error:', error)
@@ -476,7 +541,6 @@ app.get('/api/admin/users', verifyToken, isAdmin, async (req, res) => {
       .from('users')
       .select('id, email, created_at')
       .order('created_at', { ascending: false })
-
     if (error) throw error
     res.json({ users: data })
   } catch (error) {
@@ -495,7 +559,6 @@ app.get('/api/admin/user-challenges', verifyToken, isAdmin, async (req, res) => 
         challenge:challenges(name)
       `)
       .order('created_at', { ascending: false })
-
     if (error) throw error
     res.json({ userChallenges: data })
   } catch (error) {
@@ -542,12 +605,10 @@ app.get('/api/admin/stats', verifyToken, isAdmin, async (req, res) => {
 app.delete('/api/admin/user-challenges/:id', verifyToken, isAdmin, async (req, res) => {
   try {
     const { id } = req.params
-
     const { error } = await supabase
       .from('user_challenges')
       .delete()
       .eq('id', id)
-
     if (error) throw error
     res.json({ success: true })
   } catch (error) {
@@ -555,55 +616,7 @@ app.delete('/api/admin/user-challenges/:id', verifyToken, isAdmin, async (req, r
     res.status(500).json({ error: 'Server error' })
   }
 })
-// Close order
-app.put('/api/orders/:id/close', verifyToken, async (req, res) => {
-  try {
-    const { id } = req.params
-    const user_id = req.user.id
 
-    // Get order
-    const { data: order, error: fetchError } = await supabase
-      .from('orders')
-      .select('*')
-      .eq('id', id)
-      .eq('user_id', user_id)
-      .single()
-
-    if (fetchError || !order) {
-      return res.status(404).json({ error: 'Order not found' })
-    }
-
-    // Calculate final P&L
-    const binanceSymbol = symbolMap[order.symbol]
-    const closePrice = priceData[binanceSymbol].current
-    
-    let finalPnL = 0
-    if (order.side === 'buy') {
-      finalPnL = (closePrice - order.entry_price) * order.size
-    } else {
-      finalPnL = (order.entry_price - closePrice) * order.size
-    }
-
-    // Update order
-    const { data, error } = await supabase
-      .from('orders')
-      .update({
-        status: 'closed',
-        current_price: closePrice,
-        pnl: finalPnL,
-        closed_at: new Date().toISOString()
-      })
-      .eq('id', id)
-      .select()
-
-    if (error) throw error
-
-    res.json({ success: true, order: data[0] })
-  } catch (error) {
-    console.error('Error:', error)
-    res.status(500).json({ error: 'Server error' })
-  }
-})
 const PORT = process.env.PORT || 3001
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`)
