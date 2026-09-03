@@ -5,6 +5,7 @@ const { createClient } = require('@supabase/supabase-js')
 const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
 const https = require('https')
+const http = require('http')
 
 const app = express()
 
@@ -18,20 +19,17 @@ const supabase = createClient(
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-key'
 
-// Bybit price cache
+// Price cache with historical data
 let priceCache = {
-  'BTC/USDT': 43000,
-  'ETH/USDT': 2300,
-  'BNB/USDT': 580
+  'BTC/USDT': { current: 43000, history: [] },
+  'ETH/USDT': { current: 2300, history: [] },
+  'BNB/USDT': { current: 580, history: [] }
 }
 
-// Fetch prices from Bybit
-const fetchBybitPrice = (symbol) => {
+// Fetch prices from CoinGecko (более надежный)
+const fetchCoinGeckoPrice = (coinId) => {
   return new Promise((resolve) => {
-    const [base, quote] = symbol.split('/')
-    const bybitSymbol = base + quote
-    
-    const url = `https://api.bybit.com/v5/market/tickers?category=spot&symbol=${bybitSymbol}`
+    const url = `https://api.coingecko.com/api/v3/simple/price?ids=${coinId}&vs_currencies=usd`
     
     https.get(url, (res) => {
       let data = ''
@@ -39,137 +37,59 @@ const fetchBybitPrice = (symbol) => {
       res.on('end', () => {
         try {
           const json = JSON.parse(data)
-          if (json.result && json.result.list && json.result.list[0]) {
-            const price = parseFloat(json.result.list[0].lastPrice)
-            priceCache[symbol] = price
+          const price = json[coinId]?.usd
+          if (price) {
             resolve(price)
           } else {
-            resolve(priceCache[symbol] || 0)
+            resolve(null)
           }
         } catch (err) {
-          resolve(priceCache[symbol] || 0)
+          resolve(null)
         }
       })
-    }).on('error', () => resolve(priceCache[symbol] || 0))
+    }).on('error', () => resolve(null))
   })
 }
 
-// Update prices periodically
-setInterval(async () => {
-  for (const symbol of Object.keys(priceCache)) {
-    await fetchBybitPrice(symbol)
-  }
-}, 5000)
+// Map symbols to CoinGecko IDs
+const symbolToCoinId = {
+  'BTC/USDT': 'bitcoin',
+  'ETH/USDT': 'ethereum',
+  'BNB/USDT': 'binancecoin'
+}
 
-// Calculate P&L for user challenge
-const calculateUserChallengePnL = async (user_id, challenge_id) => {
-  try {
-    // Get all user's open orders
-    const { data: orders, error: ordersError } = await supabase
-      .from('orders')
-      .select('*')
-      .eq('user_id', user_id)
-      .eq('status', 'open')
-
-    if (ordersError) throw ordersError
-
-    // Calculate total P&L
-    let totalPnL = 0
-    let maxDrawdown = 0
-
-    for (let order of orders) {
-      const currentPrice = await fetchBybitPrice(order.symbol)
-      order.current_price = currentPrice
-
-      if (order.side === 'buy') {
-        order.pnl = (currentPrice - order.entry_price) * order.size
-      } else {
-        order.pnl = (order.entry_price - currentPrice) * order.size
+// Update prices with historical data
+const updatePrices = async () => {
+  for (const [symbol, coinId] of Object.entries(symbolToCoinId)) {
+    const price = await fetchCoinGeckoPrice(coinId)
+    if (price) {
+      if (priceCache[symbol]) {
+        const newPrice = parseFloat(price)
+        priceCache[symbol].current = newPrice
+        
+        // Keep last 100 candles
+        priceCache[symbol].history.push({
+          time: Math.floor(Date.now() / 1000),
+          open: newPrice,
+          high: newPrice,
+          low: newPrice,
+          close: newPrice,
+          volume: 0
+        })
+        
+        if (priceCache[symbol].history.length > 100) {
+          priceCache[symbol].history.shift()
+        }
       }
-
-      totalPnL += order.pnl
     }
-
-    // Get challenge info
-    const { data: challenge, error: challengeError } = await supabase
-      .from('challenges')
-      .select('*')
-      .eq('id', challenge_id)
-      .single()
-
-    if (challengeError) throw challengeError
-
-    // Get user challenge
-    const { data: userChallenge, error: userChallengeError } = await supabase
-      .from('user_challenges')
-      .select('*')
-      .eq('user_id', user_id)
-      .eq('challenge_id', challenge_id)
-      .eq('status', 'active')
-      .single()
-
-    if (userChallengeError && userChallengeError.code !== 'PGRST116') throw userChallengeError
-
-    if (!userChallenge) {
-      return { pnl: totalPnL, status: 'no_challenge' }
-    }
-
-    // Calculate current balance
-    const currentBalance = userChallenge.balance + totalPnL
-    const initialBalance = 10000
-
-    // Calculate drawdown percentage
-    const drawdown = ((initialBalance - currentBalance) / initialBalance) * 100
-
-    // Check if challenge failed or passed
-    let newStatus = userChallenge.status
-    let shouldUpdate = false
-
-    if (drawdown > challenge.max_drawdown) {
-      newStatus = 'failed'
-      shouldUpdate = true
-    } else if (totalPnL >= challenge.profit_target) {
-      newStatus = 'passed'
-      shouldUpdate = true
-    }
-
-    // Update challenge status if needed
-    if (shouldUpdate) {
-      await supabase
-        .from('user_challenges')
-        .update({
-          status: newStatus,
-          balance: currentBalance,
-          max_balance: Math.max(userChallenge.max_balance, currentBalance),
-          ended_at: new Date().toISOString()
-        })
-        .eq('id', userChallenge.id)
-    } else {
-      // Update balance tracking
-      await supabase
-        .from('user_challenges')
-        .update({
-          balance: currentBalance,
-          max_balance: Math.max(userChallenge.max_balance, currentBalance)
-        })
-        .eq('id', userChallenge.id)
-    }
-
-    return {
-      pnl: totalPnL,
-      balance: currentBalance,
-      drawdown: drawdown,
-      status: newStatus,
-      profitTarget: challenge.profit_target,
-      maxDrawdown: challenge.max_drawdown,
-      passed: newStatus === 'passed',
-      failed: newStatus === 'failed'
-    }
-  } catch (error) {
-    console.error('Error calculating P&L:', error)
-    throw error
   }
 }
+
+// Update prices every 10 seconds
+setInterval(updatePrices, 10000)
+
+// Initial price fetch
+updatePrices()
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'Server is running' })
@@ -266,16 +186,31 @@ app.post('/api/login', async (req, res) => {
   }
 })
 
+// Get current prices
 app.get('/api/prices', async (req, res) => {
   try {
-    const symbols = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT']
     const prices = {}
+    for (const [symbol, data] of Object.entries(priceCache)) {
+      prices[symbol] = data.current
+    }
+    res.json({ prices })
+  } catch (error) {
+    console.error('Error:', error)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+// Get candlestick data for charts
+app.get('/api/candlesticks/:symbol', async (req, res) => {
+  try {
+    const { symbol } = req.params
+    const data = priceCache[symbol]
     
-    for (const symbol of symbols) {
-      prices[symbol] = await fetchBybitPrice(symbol)
+    if (!data) {
+      return res.status(400).json({ error: 'Invalid symbol' })
     }
     
-    res.json({ prices })
+    res.json({ candlesticks: data.history })
   } catch (error) {
     console.error('Error:', error)
     res.status(500).json({ error: 'Server error' })
@@ -321,7 +256,8 @@ app.get('/api/orders', verifyToken, async (req, res) => {
     
     // Update P&L with current prices
     for (let order of data) {
-      const currentPrice = await fetchBybitPrice(order.symbol)
+      const symbolData = priceCache[order.symbol]
+      const currentPrice = symbolData ? symbolData.current : order.entry_price
       order.current_price = currentPrice
       
       if (order.side === 'buy') {
@@ -402,7 +338,102 @@ app.get('/api/user-challenges', verifyToken, async (req, res) => {
   }
 })
 
-// Get challenge P&L status
+// P&L calculation function
+const calculateUserChallengePnL = async (user_id, challenge_id) => {
+  try {
+    const { data: orders, error: ordersError } = await supabase
+      .from('orders')
+      .select('*')
+      .eq('user_id', user_id)
+      .eq('status', 'open')
+
+    if (ordersError) throw ordersError
+
+    let totalPnL = 0
+
+    for (let order of orders) {
+      const symbolData = priceCache[order.symbol]
+      const currentPrice = symbolData ? symbolData.current : order.entry_price
+      order.current_price = currentPrice
+
+      if (order.side === 'buy') {
+        order.pnl = (currentPrice - order.entry_price) * order.size
+      } else {
+        order.pnl = (order.entry_price - currentPrice) * order.size
+      }
+
+      totalPnL += order.pnl
+    }
+
+    const { data: challenge } = await supabase
+      .from('challenges')
+      .select('*')
+      .eq('id', challenge_id)
+      .single()
+
+    const { data: userChallenge } = await supabase
+      .from('user_challenges')
+      .select('*')
+      .eq('user_id', user_id)
+      .eq('challenge_id', challenge_id)
+      .eq('status', 'active')
+      .single()
+
+    if (!userChallenge) {
+      return { pnl: totalPnL, status: 'no_challenge' }
+    }
+
+    const currentBalance = userChallenge.balance + totalPnL
+    const initialBalance = 10000
+    const drawdown = ((initialBalance - currentBalance) / initialBalance) * 100
+
+    let newStatus = userChallenge.status
+    let shouldUpdate = false
+
+    if (drawdown > challenge.max_drawdown) {
+      newStatus = 'failed'
+      shouldUpdate = true
+    } else if (totalPnL >= challenge.profit_target) {
+      newStatus = 'passed'
+      shouldUpdate = true
+    }
+
+    if (shouldUpdate) {
+      await supabase
+        .from('user_challenges')
+        .update({
+          status: newStatus,
+          balance: currentBalance,
+          max_balance: Math.max(userChallenge.max_balance, currentBalance),
+          ended_at: new Date().toISOString()
+        })
+        .eq('id', userChallenge.id)
+    } else {
+      await supabase
+        .from('user_challenges')
+        .update({
+          balance: currentBalance,
+          max_balance: Math.max(userChallenge.max_balance, currentBalance)
+        })
+        .eq('id', userChallenge.id)
+    }
+
+    return {
+      pnl: totalPnL,
+      balance: currentBalance,
+      drawdown: drawdown,
+      status: newStatus,
+      profitTarget: challenge.profit_target,
+      maxDrawdown: challenge.max_drawdown,
+      passed: newStatus === 'passed',
+      failed: newStatus === 'failed'
+    }
+  } catch (error) {
+    console.error('Error calculating P&L:', error)
+    throw error
+  }
+}
+
 app.get('/api/challenge-status', verifyToken, async (req, res) => {
   try {
     const user_id = req.user.id
@@ -419,18 +450,16 @@ app.get('/api/challenge-status', verifyToken, async (req, res) => {
     res.status(500).json({ error: 'Server error' })
   }
 })
-// Admin middleware - проверка если пользователь admin
+
+// Admin routes
 const isAdmin = (req, res, next) => {
-  // Для простоты: первый пользователь или по ID
-  const adminIds = ['add-your-admin-id-here']
-  if (adminIds.includes(req.user.id) || req.user.email === 'felix@gmail.com') {
+  if (req.user.email === 'felix@gmail.com') {
     next()
   } else {
     res.status(403).json({ error: 'Admin access required' })
   }
 }
 
-// Get all users
 app.get('/api/admin/users', verifyToken, isAdmin, async (req, res) => {
   try {
     const { data, error } = await supabase
@@ -446,7 +475,6 @@ app.get('/api/admin/users', verifyToken, isAdmin, async (req, res) => {
   }
 })
 
-// Get all user challenges
 app.get('/api/admin/user-challenges', verifyToken, isAdmin, async (req, res) => {
   try {
     const { data, error } = await supabase
@@ -466,27 +494,22 @@ app.get('/api/admin/user-challenges', verifyToken, isAdmin, async (req, res) => 
   }
 })
 
-// Get statistics
 app.get('/api/admin/stats', verifyToken, isAdmin, async (req, res) => {
   try {
-    // Total users
     const { count: usersCount } = await supabase
       .from('users')
       .select('*', { count: 'exact', head: true })
 
-    // Active challenges
     const { count: activeChallenges } = await supabase
       .from('user_challenges')
       .select('*', { count: 'exact', head: true })
       .eq('status', 'active')
 
-    // Passed challenges
     const { count: passedChallenges } = await supabase
       .from('user_challenges')
       .select('*', { count: 'exact', head: true })
       .eq('status', 'passed')
 
-    // Failed challenges
     const { count: failedChallenges } = await supabase
       .from('user_challenges')
       .select('*', { count: 'exact', head: true })
@@ -506,33 +529,6 @@ app.get('/api/admin/stats', verifyToken, isAdmin, async (req, res) => {
   }
 })
 
-// Update challenge
-app.put('/api/admin/challenges/:id', verifyToken, isAdmin, async (req, res) => {
-  try {
-    const { id } = req.params
-    const { name, price, max_drawdown, profit_target, duration_days } = req.body
-
-    const { data, error } = await supabase
-      .from('challenges')
-      .update({
-        name,
-        price,
-        max_drawdown,
-        profit_target,
-        duration_days
-      })
-      .eq('id', id)
-      .select()
-
-    if (error) throw error
-    res.json({ challenge: data })
-  } catch (error) {
-    console.error('Error:', error)
-    res.status(500).json({ error: 'Server error' })
-  }
-})
-
-// Delete user challenge
 app.delete('/api/admin/user-challenges/:id', verifyToken, isAdmin, async (req, res) => {
   try {
     const { id } = req.params
@@ -549,6 +545,7 @@ app.delete('/api/admin/user-challenges/:id', verifyToken, isAdmin, async (req, r
     res.status(500).json({ error: 'Server error' })
   }
 })
+
 const PORT = process.env.PORT || 3001
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`)
