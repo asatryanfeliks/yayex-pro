@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react'
-import { createChart, ColorType } from 'lightweight-charts'
+import { useState, useEffect } from 'react'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import '../styles/trading.css'
 
 interface Order {
@@ -18,13 +18,9 @@ interface Prices {
   [key: string]: number
 }
 
-interface Candlestick {
-  time: number
-  open: number
-  high: number
-  low: number
-  close: number
-  volume: number
+interface ChartData {
+  time: string
+  price: number
 }
 
 export default function Trading() {
@@ -34,51 +30,12 @@ export default function Trading() {
   const [size, setSize] = useState('')
   const [orders, setOrders] = useState<Order[]>([])
   const [prices, setPrices] = useState<Prices>({})
+  const [chartData, setChartData] = useState<ChartData[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const chartContainerRef = useRef<HTMLDivElement>(null)
 
   const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001'
   const token = localStorage.getItem('token')
-
-  // Initialize chart
-  useEffect(() => {
-    if (!chartContainerRef.current) return
-
-    const chart = createChart(chartContainerRef.current, {
-      layout: {
-        textColor: '#d4af37',
-        background: { type: ColorType.Solid, color: '#1a1a1a' }
-      },
-      width: chartContainerRef.current.clientWidth,
-      height: 400,
-      timeScale: {
-        timeVisible: true,
-        secondsVisible: false
-      }
-    })
-
-   const candleSeries = (chart as any).addCandlestickSeries({
-      upColor: '#10b981',
-      downColor: '#ef4444',
-      borderUpColor: '#10b981',
-      borderDownColor: '#ef4444'
-    })
-
-    fetchCandlesticks(symbol, candleSeries, chart)
-
-    const handleResize = () => {
-      if (chartContainerRef.current) {
-        chart.applyOptions({ width: chartContainerRef.current.clientWidth })
-      }
-    }
-
-    window.addEventListener('resize', handleResize)
-    return () => {
-      window.removeEventListener('resize', handleResize)
-      chart.remove()
-    }
-  }, [symbol])
 
   useEffect(() => {
     fetchOrders()
@@ -87,27 +44,14 @@ export default function Trading() {
     return () => clearInterval(interval)
   }, [])
 
-  const fetchCandlesticks = async (sym: string, candleSeries: any, chart: any) => {
-    try {
-      const response = await fetch(`${apiUrl}/api/candlesticks/${sym}`)
-      const data = await response.json()
-      
-      if (response.ok && data.candlesticks && data.candlesticks.length > 0) {
-        const formattedData = data.candlesticks.map((c: Candlestick) => ({
-          time: c.time,
-          open: c.open,
-          high: c.high,
-          low: c.low,
-          close: c.close
-        }))
-        
-        candleSeries.setData(formattedData)
-        chart.timeScale().fitContent()
-      }
-    } catch (err) {
-      console.error('Error fetching candlesticks:', err)
+  useEffect(() => {
+    if (prices[symbol]) {
+      setChartData(prev => [...prev.slice(-59), {
+        time: new Date().toLocaleTimeString(),
+        price: prices[symbol]
+      }])
     }
-  }
+  }, [prices, symbol])
 
   const fetchPrices = async () => {
     try {
@@ -179,7 +123,7 @@ export default function Trading() {
       <div className="trading-layout">
         <div className="trading-panel">
           <div className="price-ticker">
-            <h3>Live Prices</h3>
+            <h3>Live Prices (CoinGecko)</h3>
             <div className="prices">
               {Object.entries(prices).map(([sym, price]) => (
                 <div key={sym} className="price-item">
@@ -227,8 +171,27 @@ export default function Trading() {
         </div>
 
         <div className="trading-chart">
-          <h3>{symbol} TradingView Chart</h3>
-          <div ref={chartContainerRef} className="chart-container" />
+          <h3>{symbol} Live Chart</h3>
+          {chartData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" />
+                <XAxis dataKey="time" stroke="#999" tick={{ fontSize: 12 }} />
+                <YAxis stroke="#999" domain="dataMin - 100" />
+                <Tooltip 
+                  contentStyle={{ background: '#1a1a1a', border: '1px solid #2a2a2a' }}
+                  formatter={(value: any) => `$${Number(value).toFixed(2)}`}
+                />
+                <Bar 
+                  dataKey="price" 
+                  fill="#d4af37"
+                  radius={[4, 4, 0, 0]}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <p className="loading">Loading chart...</p>
+          )}
         </div>
 
         <div className="trading-positions">
