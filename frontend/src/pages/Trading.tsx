@@ -177,7 +177,7 @@ export default function Trading() {
               <BarChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" />
                 <XAxis dataKey="time" stroke="#999" tick={{ fontSize: 12 }} />
-                <YAxis stroke="#999" domain="dataMin - 100" />
+                <YAxis stroke="#999" domain={['dataMin - 100', 'dataMax + 100']} />
                 <Tooltip 
                   contentStyle={{ background: '#1a1a1a', border: '1px solid #2a2a2a' }}
                   formatter={(value: any) => `$${Number(value).toFixed(2)}`}
