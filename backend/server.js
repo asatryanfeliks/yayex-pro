@@ -4,7 +4,6 @@ require('dotenv').config()
 const { createClient } = require('@supabase/supabase-js')
 const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
-const WebSocket = require('ws')
 
 const app = express()
 
@@ -18,26 +17,28 @@ const supabase = createClient(
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-key'
 
-// Binance WebSocket data
+// Price simulation data
 let priceData = {
   'BTCUSDT': {
+    basePrice: 43000,
     current: 43000,
     candlesticks: [],
-    ws: null
+    lastCandleTime: Math.floor(Date.now() / 60000)
   },
   'ETHUSDT': {
+    basePrice: 2300,
     current: 2300,
     candlesticks: [],
-    ws: null
+    lastCandleTime: Math.floor(Date.now() / 60000)
   },
   'BNBUSDT': {
+    basePrice: 580,
     current: 580,
     candlesticks: [],
-    ws: null
+    lastCandleTime: Math.floor(Date.now() / 60000)
   }
 }
 
-// Symbol mapping
 const symbolMap = {
   'BTC/USDT': 'BTCUSDT',
   'ETH/USDT': 'ETHUSDT',
@@ -50,68 +51,59 @@ const reverseSymbolMap = {
   'BNBUSDT': 'BNB/USDT'
 }
 
-// Connect to Binance WebSocket
-const connectBinanceWebSocket = (binanceSymbol) => {
-  const wsUrl = `wss://stream.binance.com:9443/ws/${binanceSymbol.toLowerCase()}@klines_1m`
-  
-  const ws = new WebSocket(wsUrl)
-
-  ws.on('open', () => {
-    console.log(`Connected to Binance WebSocket: ${binanceSymbol}`)
-  })
-
-  ws.on('message', (data) => {
-    try {
-      const json = JSON.parse(data)
-      const candle = json.k
-
-      const candleData = {
-        time: Math.floor(candle.t / 1000),
-        open: parseFloat(candle.o),
-        high: parseFloat(candle.h),
-        low: parseFloat(candle.l),
-        close: parseFloat(candle.c),
-        volume: parseFloat(candle.v)
+// Simulate price movement every 5 seconds
+setInterval(() => {
+  Object.keys(priceData).forEach(symbol => {
+    const data = priceData[symbol]
+    
+    // Random movement ±0.5%
+    const changePercent = (Math.random() - 0.5) * 0.01
+    const newPrice = data.current * (1 + changePercent)
+    
+    data.current = parseFloat(newPrice.toFixed(2))
+    
+    // Generate candlestick every minute
+    const currentCandleTime = Math.floor(Date.now() / 60000)
+    
+    if (currentCandleTime !== data.lastCandleTime) {
+      const candle = {
+        time: currentCandleTime * 60,
+        open: data.current * 0.995,
+        high: data.current * 1.003,
+        low: data.current * 0.997,
+        close: data.current,
+        volume: Math.random() * 1000000
       }
-
-      priceData[binanceSymbol].current = candleData.close
-
-      // Add or update last candle
-      if (priceData[binanceSymbol].candlesticks.length === 0) {
-        priceData[binanceSymbol].candlesticks.push(candleData)
-      } else {
-        const lastCandle = priceData[binanceSymbol].candlesticks[priceData[binanceSymbol].candlesticks.length - 1]
-        if (lastCandle.time === candleData.time) {
-          priceData[binanceSymbol].candlesticks[priceData[binanceSymbol].candlesticks.length - 1] = candleData
-        } else {
-          priceData[binanceSymbol].candlesticks.push(candleData)
-        }
+      
+      data.candlesticks.push(candle)
+      
+      if (data.candlesticks.length > 100) {
+        data.candlesticks.shift()
       }
-
-      // Keep last 100 candles
-      if (priceData[binanceSymbol].candlesticks.length > 100) {
-        priceData[binanceSymbol].candlesticks.shift()
-      }
-    } catch (err) {
-      console.error('Error parsing Binance data:', err)
+      
+      data.lastCandleTime = currentCandleTime
     }
   })
+}, 5000)
 
-  ws.on('error', (error) => {
-    console.error(`WebSocket error for ${binanceSymbol}:`, error)
-  })
-
-  ws.on('close', () => {
-    console.log(`WebSocket closed for ${binanceSymbol}, reconnecting in 5s...`)
-    setTimeout(() => connectBinanceWebSocket(binanceSymbol), 5000)
-  })
-
-  priceData[binanceSymbol].ws = ws
-}
-
-// Connect to all symbols on startup
+// Initial candles
 Object.keys(priceData).forEach(symbol => {
-  connectBinanceWebSocket(symbol)
+  const data = priceData[symbol]
+  const now = Math.floor(Date.now() / 60)
+  
+  for (let i = 60; i >= 0; i--) {
+    const time = (now - i) * 60
+    const price = data.basePrice * (1 + (Math.random() - 0.5) * 0.02)
+    
+    data.candlesticks.push({
+      time,
+      open: price * 0.998,
+      high: price * 1.002,
+      low: price * 0.998,
+      close: price,
+      volume: Math.random() * 1000000
+    })
+  }
 })
 
 app.get('/api/health', (req, res) => {
@@ -209,7 +201,6 @@ app.post('/api/login', async (req, res) => {
   }
 })
 
-// Get current prices
 app.get('/api/prices', (req, res) => {
   try {
     const prices = {
@@ -224,7 +215,6 @@ app.get('/api/prices', (req, res) => {
   }
 })
 
-// Get candlesticks
 app.get('/api/candlesticks/:symbol', (req, res) => {
   try {
     const { symbol } = req.params
@@ -279,7 +269,6 @@ app.get('/api/orders', verifyToken, async (req, res) => {
       .eq('user_id', user_id)
     if (error) throw error
 
-    // Update P&L with current prices
     for (let order of data) {
       const binanceSymbol = symbolMap[order.symbol]
       const currentPrice = priceData[binanceSymbol].current
@@ -363,7 +352,6 @@ app.get('/api/user-challenges', verifyToken, async (req, res) => {
   }
 })
 
-// P&L calculation
 const calculateUserChallengePnL = async (user_id, challenge_id) => {
   try {
     const { data: orders } = await supabase
@@ -474,7 +462,6 @@ app.get('/api/challenge-status', verifyToken, async (req, res) => {
   }
 })
 
-// Admin routes
 const isAdmin = (req, res, next) => {
   if (req.user.email === 'felix@gmail.com') {
     next()
