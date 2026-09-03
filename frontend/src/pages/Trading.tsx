@@ -167,8 +167,7 @@ export default function Trading() {
   }
 
   const profitProgress = pnlData ? (pnlData.pnl / pnlData.profitTarget) * 100 : 0
-  const drawdownProgress = pnlData ? (pnlData.drawdown / pnlData.maxDrawdown) * 100 : 0
-
+  
   return (
     <div className="trading-container">
       {/* Challenge Status */}
