@@ -58,7 +58,7 @@ export default function Trading() {
       }
     })
 
-    const candleSeries = chart.addCandlestickSeries({
+   const candleSeries = (chart as any).addCandlestickSeries({
       upColor: '#10b981',
       downColor: '#ef4444',
       borderUpColor: '#10b981',
