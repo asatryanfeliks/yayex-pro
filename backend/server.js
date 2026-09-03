@@ -4,8 +4,7 @@ require('dotenv').config()
 const { createClient } = require('@supabase/supabase-js')
 const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
-const https = require('https')
-const http = require('http')
+const WebSocket = require('ws')
 
 const app = express()
 
@@ -19,77 +18,101 @@ const supabase = createClient(
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-key'
 
-// Price cache with historical data
-let priceCache = {
-  'BTC/USDT': { current: 43000, history: [] },
-  'ETH/USDT': { current: 2300, history: [] },
-  'BNB/USDT': { current: 580, history: [] }
-}
-
-// Fetch prices from CoinGecko (более надежный)
-const fetchCoinGeckoPrice = (coinId) => {
-  return new Promise((resolve) => {
-    const url = `https://api.coingecko.com/api/v3/simple/price?ids=${coinId}&vs_currencies=usd`
-    
-    https.get(url, (res) => {
-      let data = ''
-      res.on('data', chunk => data += chunk)
-      res.on('end', () => {
-        try {
-          const json = JSON.parse(data)
-          const price = json[coinId]?.usd
-          if (price) {
-            resolve(price)
-          } else {
-            resolve(null)
-          }
-        } catch (err) {
-          resolve(null)
-        }
-      })
-    }).on('error', () => resolve(null))
-  })
-}
-
-// Map symbols to CoinGecko IDs
-const symbolToCoinId = {
-  'BTC/USDT': 'bitcoin',
-  'ETH/USDT': 'ethereum',
-  'BNB/USDT': 'binancecoin'
-}
-
-// Update prices with historical data
-const updatePrices = async () => {
-  for (const [symbol, coinId] of Object.entries(symbolToCoinId)) {
-    const price = await fetchCoinGeckoPrice(coinId)
-    if (price) {
-      if (priceCache[symbol]) {
-        const newPrice = parseFloat(price)
-        priceCache[symbol].current = newPrice
-        
-        // Keep last 100 candles
-        priceCache[symbol].history.push({
-          time: Math.floor(Date.now() / 1000),
-          open: newPrice,
-          high: newPrice,
-          low: newPrice,
-          close: newPrice,
-          volume: 0
-        })
-        
-        if (priceCache[symbol].history.length > 100) {
-          priceCache[symbol].history.shift()
-        }
-      }
-    }
+// Binance WebSocket data
+let priceData = {
+  'BTCUSDT': {
+    current: 43000,
+    candlesticks: [],
+    ws: null
+  },
+  'ETHUSDT': {
+    current: 2300,
+    candlesticks: [],
+    ws: null
+  },
+  'BNBUSDT': {
+    current: 580,
+    candlesticks: [],
+    ws: null
   }
 }
 
-// Update prices every 10 seconds
-setInterval(updatePrices, 10000)
+// Symbol mapping
+const symbolMap = {
+  'BTC/USDT': 'BTCUSDT',
+  'ETH/USDT': 'ETHUSDT',
+  'BNB/USDT': 'BNBUSDT'
+}
 
-// Initial price fetch
-updatePrices()
+const reverseSymbolMap = {
+  'BTCUSDT': 'BTC/USDT',
+  'ETHUSDT': 'ETH/USDT',
+  'BNBUSDT': 'BNB/USDT'
+}
+
+// Connect to Binance WebSocket
+const connectBinanceWebSocket = (binanceSymbol) => {
+  const wsUrl = `wss://stream.binance.com:9443/ws/${binanceSymbol.toLowerCase()}@klines_1m`
+  
+  const ws = new WebSocket(wsUrl)
+
+  ws.on('open', () => {
+    console.log(`Connected to Binance WebSocket: ${binanceSymbol}`)
+  })
+
+  ws.on('message', (data) => {
+    try {
+      const json = JSON.parse(data)
+      const candle = json.k
+
+      const candleData = {
+        time: Math.floor(candle.t / 1000),
+        open: parseFloat(candle.o),
+        high: parseFloat(candle.h),
+        low: parseFloat(candle.l),
+        close: parseFloat(candle.c),
+        volume: parseFloat(candle.v)
+      }
+
+      priceData[binanceSymbol].current = candleData.close
+
+      // Add or update last candle
+      if (priceData[binanceSymbol].candlesticks.length === 0) {
+        priceData[binanceSymbol].candlesticks.push(candleData)
+      } else {
+        const lastCandle = priceData[binanceSymbol].candlesticks[priceData[binanceSymbol].candlesticks.length - 1]
+        if (lastCandle.time === candleData.time) {
+          priceData[binanceSymbol].candlesticks[priceData[binanceSymbol].candlesticks.length - 1] = candleData
+        } else {
+          priceData[binanceSymbol].candlesticks.push(candleData)
+        }
+      }
+
+      // Keep last 100 candles
+      if (priceData[binanceSymbol].candlesticks.length > 100) {
+        priceData[binanceSymbol].candlesticks.shift()
+      }
+    } catch (err) {
+      console.error('Error parsing Binance data:', err)
+    }
+  })
+
+  ws.on('error', (error) => {
+    console.error(`WebSocket error for ${binanceSymbol}:`, error)
+  })
+
+  ws.on('close', () => {
+    console.log(`WebSocket closed for ${binanceSymbol}, reconnecting in 5s...`)
+    setTimeout(() => connectBinanceWebSocket(binanceSymbol), 5000)
+  })
+
+  priceData[binanceSymbol].ws = ws
+}
+
+// Connect to all symbols on startup
+Object.keys(priceData).forEach(symbol => {
+  connectBinanceWebSocket(symbol)
+})
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'Server is running' })
@@ -187,11 +210,12 @@ app.post('/api/login', async (req, res) => {
 })
 
 // Get current prices
-app.get('/api/prices', async (req, res) => {
+app.get('/api/prices', (req, res) => {
   try {
-    const prices = {}
-    for (const [symbol, data] of Object.entries(priceCache)) {
-      prices[symbol] = data.current
+    const prices = {
+      'BTC/USDT': priceData['BTCUSDT'].current,
+      'ETH/USDT': priceData['ETHUSDT'].current,
+      'BNB/USDT': priceData['BNBUSDT'].current
     }
     res.json({ prices })
   } catch (error) {
@@ -200,17 +224,18 @@ app.get('/api/prices', async (req, res) => {
   }
 })
 
-// Get candlestick data for charts
-app.get('/api/candlesticks/:symbol', async (req, res) => {
+// Get candlesticks
+app.get('/api/candlesticks/:symbol', (req, res) => {
   try {
     const { symbol } = req.params
-    const data = priceCache[symbol]
-    
-    if (!data) {
+    const binanceSymbol = symbolMap[symbol]
+
+    if (!binanceSymbol) {
       return res.status(400).json({ error: 'Invalid symbol' })
     }
-    
-    res.json({ candlesticks: data.history })
+
+    const candlesticks = priceData[binanceSymbol].candlesticks
+    res.json({ candlesticks })
   } catch (error) {
     console.error('Error:', error)
     res.status(500).json({ error: 'Server error' })
@@ -253,20 +278,20 @@ app.get('/api/orders', verifyToken, async (req, res) => {
       .select('*')
       .eq('user_id', user_id)
     if (error) throw error
-    
+
     // Update P&L with current prices
     for (let order of data) {
-      const symbolData = priceCache[order.symbol]
-      const currentPrice = symbolData ? symbolData.current : order.entry_price
+      const binanceSymbol = symbolMap[order.symbol]
+      const currentPrice = priceData[binanceSymbol].current
       order.current_price = currentPrice
-      
+
       if (order.side === 'buy') {
         order.pnl = (currentPrice - order.entry_price) * order.size
       } else {
         order.pnl = (order.entry_price - currentPrice) * order.size
       }
     }
-    
+
     res.json({ orders: data })
   } catch (error) {
     console.error('Error:', error)
@@ -338,23 +363,20 @@ app.get('/api/user-challenges', verifyToken, async (req, res) => {
   }
 })
 
-// P&L calculation function
+// P&L calculation
 const calculateUserChallengePnL = async (user_id, challenge_id) => {
   try {
-    const { data: orders, error: ordersError } = await supabase
+    const { data: orders } = await supabase
       .from('orders')
       .select('*')
       .eq('user_id', user_id)
       .eq('status', 'open')
 
-    if (ordersError) throw ordersError
-
     let totalPnL = 0
 
     for (let order of orders) {
-      const symbolData = priceCache[order.symbol]
-      const currentPrice = symbolData ? symbolData.current : order.entry_price
-      order.current_price = currentPrice
+      const binanceSymbol = symbolMap[order.symbol]
+      const currentPrice = priceData[binanceSymbol].current
 
       if (order.side === 'buy') {
         order.pnl = (currentPrice - order.entry_price) * order.size
@@ -388,23 +410,24 @@ const calculateUserChallengePnL = async (user_id, challenge_id) => {
     const drawdown = ((initialBalance - currentBalance) / initialBalance) * 100
 
     let newStatus = userChallenge.status
-    let shouldUpdate = false
 
     if (drawdown > challenge.max_drawdown) {
       newStatus = 'failed'
-      shouldUpdate = true
-    } else if (totalPnL >= challenge.profit_target) {
-      newStatus = 'passed'
-      shouldUpdate = true
-    }
-
-    if (shouldUpdate) {
       await supabase
         .from('user_challenges')
         .update({
           status: newStatus,
           balance: currentBalance,
-          max_balance: Math.max(userChallenge.max_balance, currentBalance),
+          ended_at: new Date().toISOString()
+        })
+        .eq('id', userChallenge.id)
+    } else if (totalPnL >= challenge.profit_target) {
+      newStatus = 'passed'
+      await supabase
+        .from('user_challenges')
+        .update({
+          status: newStatus,
+          balance: currentBalance,
           ended_at: new Date().toISOString()
         })
         .eq('id', userChallenge.id)
