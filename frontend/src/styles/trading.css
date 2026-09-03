@@ -210,3 +210,158 @@
     grid-column: 1;
   }
 }
+/* Challenge Status Header */
+.challenge-status-header {
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  padding: 24px;
+  border-radius: 12px;
+  margin-bottom: 32px;
+}
+
+.challenge-status-header.active {
+  border-color: #10b981;
+}
+
+.challenge-status-header.passed {
+  border-color: #10b981;
+  background: #10b98111;
+}
+
+.challenge-status-header.failed {
+  border-color: #ef4444;
+  background: #ef444411;
+}
+
+.challenge-header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.challenge-header-left h2 {
+  color: #d4af37;
+  font-size: 24px;
+  margin: 0;
+}
+
+.status-badge {
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.status-badge.active {
+  background: #10b98122;
+  color: #10b981;
+  border: 1px solid #10b981;
+}
+
+.status-badge.passed {
+  background: #10b98144;
+  color: #10b981;
+  border: 1px solid #10b981;
+}
+
+.status-badge.failed {
+  background: #ef444422;
+  color: #ef4444;
+  border: 1px solid #ef4444;
+}
+
+.challenge-stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.stat-mini {
+  background: #0f0f0f;
+  padding: 12px;
+  border-radius: 6px;
+  border: 1px solid #2a2a2a;
+}
+
+.stat-mini label {
+  color: #999;
+  font-size: 11px;
+  text-transform: uppercase;
+  display: block;
+  margin-bottom: 6px;
+}
+
+.stat-mini p {
+  color: #d4af37;
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.stat-mini p.positive {
+  color: #10b981;
+}
+
+.stat-mini p.negative {
+  color: #ef4444;
+}
+
+.stat-mini p.danger {
+  color: #ef4444;
+}
+
+.progress-mini {
+  background: #0f0f0f;
+  padding: 12px;
+  border-radius: 6px;
+  border: 1px solid #2a2a2a;
+}
+
+.progress-mini label {
+  color: #999;
+  font-size: 11px;
+  text-transform: uppercase;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.progress-bar-mini {
+  background: #000;
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-bar-mini .progress-fill {
+  height: 100%;
+  background: #10b981;
+  transition: width 0.3s;
+}
+
+.challenge-status-header .alert {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.challenge-status-header .alert.success {
+  background: #10b98122;
+  border: 1px solid #10b981;
+  color: #10b981;
+}
+
+.challenge-status-header .alert.danger {
+  background: #ef444422;
+  border: 1px solid #ef4444;
+  color: #ef4444;
+}
+
+@media (max-width: 1024px) {
+  .challenge-stats-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

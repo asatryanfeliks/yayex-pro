@@ -23,6 +23,17 @@ interface ChartData {
   price: number
 }
 
+interface PnLData {
+  pnl: number
+  balance: number
+  drawdown: number
+  status: string
+  profitTarget: number
+  maxDrawdown: number
+  passed: boolean
+  failed: boolean
+}
+
 export default function Trading() {
   const [symbol, setSymbol] = useState('BTC/USDT')
   const [side, setSide] = useState('buy')
@@ -33,6 +44,8 @@ export default function Trading() {
   const [chartData, setChartData] = useState<ChartData[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [pnlData, setPnlData] = useState<PnLData | null>(null)
+  const [userChallenge, setUserChallenge] = useState<any>(null)
 
   const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001'
   const token = localStorage.getItem('token')
@@ -40,8 +53,15 @@ export default function Trading() {
   useEffect(() => {
     fetchOrders()
     fetchPrices()
-    const interval = setInterval(fetchPrices, 5000)
-    return () => clearInterval(interval)
+    fetchChallengeData()
+    
+    const priceInterval = setInterval(fetchPrices, 5000)
+    const challengeInterval = setInterval(fetchChallengeData, 5000)
+    
+    return () => {
+      clearInterval(priceInterval)
+      clearInterval(challengeInterval)
+    }
   }, [])
 
   useEffect(() => {
@@ -75,6 +95,34 @@ export default function Trading() {
       if (response.ok) {
         setOrders(data.orders || [])
       }
+    } catch (err) {
+      console.error('Error:', err)
+    }
+  }
+
+  const fetchChallengeData = async () => {
+    try {
+      // Get active challenge
+      const challengeRes = await fetch(`${apiUrl}/api/user-challenges`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      const challengeData = await challengeRes.json()
+
+      if (!challengeData.userChallenge) {
+        setUserChallenge(null)
+        setPnlData(null)
+        return
+      }
+
+      setUserChallenge(challengeData.userChallenge)
+
+      // Get P&L status
+      const pnlRes = await fetch(
+        `${apiUrl}/api/challenge-status?challenge_id=${challengeData.userChallenge.challenge_id}`,
+        { headers: { 'Authorization': `Bearer ${token}` } }
+      )
+      const pnlData = await pnlRes.json()
+      setPnlData(pnlData)
     } catch (err) {
       console.error('Error:', err)
     }
@@ -118,12 +166,56 @@ export default function Trading() {
     }
   }
 
+  const profitProgress = pnlData ? (pnlData.pnl / pnlData.profitTarget) * 100 : 0
+  const drawdownProgress = pnlData ? (pnlData.drawdown / pnlData.maxDrawdown) * 100 : 0
+
   return (
     <div className="trading-container">
+      {/* Challenge Status */}
+      {userChallenge && pnlData && (
+        <div className={`challenge-status-header ${pnlData.status}`}>
+          <div className="challenge-header-left">
+            <h2>{userChallenge.challenge.name} Challenge</h2>
+            <span className={`status-badge ${pnlData.status}`}>
+              {pnlData.status.toUpperCase()}
+            </span>
+          </div>
+
+          <div className="challenge-stats-row">
+            <div className="stat-mini">
+              <label>Balance</label>
+              <p>${pnlData.balance.toFixed(2)}</p>
+            </div>
+            <div className="stat-mini">
+              <label>P&L</label>
+              <p className={pnlData.pnl > 0 ? 'positive' : 'negative'}>
+                ${pnlData.pnl.toFixed(2)}
+              </p>
+            </div>
+            <div className="stat-mini">
+              <label>Drawdown</label>
+              <p className={pnlData.drawdown > pnlData.maxDrawdown ? 'danger' : ''}>
+                {pnlData.drawdown.toFixed(2)}%
+              </p>
+            </div>
+            <div className="progress-mini">
+              <label>Profit: ${pnlData.profitTarget}</label>
+              <div className="progress-bar-mini">
+                <div className="progress-fill" style={{ width: `${Math.min(profitProgress, 100)}%` }} />
+              </div>
+            </div>
+          </div>
+
+          {pnlData.passed && <div className="alert success">✓ Challenge Passed!</div>}
+          {pnlData.failed && <div className="alert danger">✗ Challenge Failed!</div>}
+        </div>
+      )}
+
+      {/* Trading Interface */}
       <div className="trading-layout">
         <div className="trading-panel">
           <div className="price-ticker">
-            <h3>Live Prices (CoinGecko)</h3>
+            <h3>Live Prices</h3>
             <div className="prices">
               {Object.entries(prices).map(([sym, price]) => (
                 <div key={sym} className="price-item">
