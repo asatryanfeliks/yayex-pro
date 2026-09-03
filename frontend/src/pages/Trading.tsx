@@ -147,18 +147,7 @@ export default function Trading() {
           size: parseFloat(size)
         })
       })
-const handleCloseOrder = async (orderId: string) => {
-  try {
-    const response = await fetch(`${apiUrl}/api/orders/${orderId}/close`, {
-      method: 'PUT',
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
-    if (response.ok) {
-      fetchOrders()
-    }
-  } catch (err) {
-    console.error('Error:', err)
-  }
+
 }
       const data = await response.json()
 
@@ -177,7 +166,19 @@ const handleCloseOrder = async (orderId: string) => {
       setLoading(false)
     }
   }
-
+const handleCloseOrder = async (orderId: string) => {
+  try {
+    const response = await fetch(`${apiUrl}/api/orders/${orderId}/close`, {
+      method: 'PUT',
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+    if (response.ok) {
+      fetchOrders()
+    }
+  } catch (err) {
+    console.error('Error:', err)
+  }
+}
   const profitProgress = pnlData ? (pnlData.pnl / pnlData.profitTarget) * 100 : 0
   
   return (
