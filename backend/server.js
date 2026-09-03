@@ -555,7 +555,55 @@ app.delete('/api/admin/user-challenges/:id', verifyToken, isAdmin, async (req, r
     res.status(500).json({ error: 'Server error' })
   }
 })
+// Close order
+app.put('/api/orders/:id/close', verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params
+    const user_id = req.user.id
 
+    // Get order
+    const { data: order, error: fetchError } = await supabase
+      .from('orders')
+      .select('*')
+      .eq('id', id)
+      .eq('user_id', user_id)
+      .single()
+
+    if (fetchError || !order) {
+      return res.status(404).json({ error: 'Order not found' })
+    }
+
+    // Calculate final P&L
+    const binanceSymbol = symbolMap[order.symbol]
+    const closePrice = priceData[binanceSymbol].current
+    
+    let finalPnL = 0
+    if (order.side === 'buy') {
+      finalPnL = (closePrice - order.entry_price) * order.size
+    } else {
+      finalPnL = (order.entry_price - closePrice) * order.size
+    }
+
+    // Update order
+    const { data, error } = await supabase
+      .from('orders')
+      .update({
+        status: 'closed',
+        current_price: closePrice,
+        pnl: finalPnL,
+        closed_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select()
+
+    if (error) throw error
+
+    res.json({ success: true, order: data[0] })
+  } catch (error) {
+    console.error('Error:', error)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
 const PORT = process.env.PORT || 3001
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`)

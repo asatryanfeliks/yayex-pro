@@ -365,3 +365,23 @@
     grid-template-columns: repeat(2, 1fr);
   }
 }
+.btn-close-order {
+  padding: 6px 12px;
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 12px;
+  transition: all 0.3s;
+}
+
+.btn-close-order:hover {
+  background: #dc2626;
+}
+
+.orders-table th:last-child,
+.orders-table td:last-child {
+  text-align: center;
+}

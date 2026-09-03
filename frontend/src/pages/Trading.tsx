@@ -147,7 +147,19 @@ export default function Trading() {
           size: parseFloat(size)
         })
       })
-
+const handleCloseOrder = async (orderId: string) => {
+  try {
+    const response = await fetch(`${apiUrl}/api/orders/${orderId}/close`, {
+      method: 'PUT',
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+    if (response.ok) {
+      fetchOrders()
+    }
+  } catch (err) {
+    console.error('Error:', err)
+  }
+}
       const data = await response.json()
 
       if (!response.ok) {
@@ -299,6 +311,7 @@ export default function Trading() {
                   <th>Current</th>
                   <th>Size</th>
                   <th>P&L</th>
+                  <th>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -311,6 +324,14 @@ export default function Trading() {
                     <td>{order.size}</td>
                     <td className={order.pnl > 0 ? 'positive' : 'negative'}>
                       ${order.pnl.toFixed(2)}
+                    </td>
+                    <td>
+                      <button 
+                        className="btn-close-order"
+                        onClick={() => handleCloseOrder(order.id)}
+                      >
+                        Close
+                      </button>
                     </td>
                   </tr>
                 ))}
